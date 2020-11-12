@@ -65,6 +65,8 @@ mrf_list = [
     ('../../gcore/data/float64.tif', 4672, [5015], ['COMPRESS=LERC', 'OPTIONS:LERC_PREC=10']),
     ('../../gcore/data/float64.tif', 4672, [4672], ['COMPRESS=LERC', 'OPTIONS=V1:YES']),
     ('../../gcore/data/utmsmall.tif', 50054, [50054], []),
+    ('small_world.tif', 30111, [30111], ['COMPRESS=LERC', 'INTERLEAVE=PIXEL']),
+    ('small_world.tif', 30111, [30111], ['COMPRESS=LERC', 'OPTIONS=V1:1', 'INTERLEAVE=PIXEL']),
     ('small_world_pct.tif', 14890, [14890], ['COMPRESS=PPNG']),
     ('byte.tif', 4672, [4603, 4652], ['COMPRESS=JPEG', 'QUALITY=99']),
     # following expected checksums are for: gcc 4.4 debug, mingw/vc9 32-bit, mingw-w64/vc12 64bit, MacOSX
@@ -360,6 +362,27 @@ def test_mrf_lerc_with_huffman():
     gdal.Unlink('/vsimem/out.lrc')
     gdal.Unlink('/vsimem/out.til')
 
+def test_raw_lerc():
+    if 'LERC' not in gdal.GetDriverByName('MRF').GetMetadataItem('DMD_CREATIONOPTIONLIST'):
+        pytest.skip()
+
+    # Defaults to LERC2
+    for opt in 'OPTIONS=V1:1', None:
+        co = ['COMPRESS=LERC']
+        if opt:
+            co.append(opt)
+        gdal.Translate('/vsimem/out.mrf', 'data/byte.tif', format='MRF',
+                        creationOptions = co)
+        ds = gdal.Open('/vsimem/out.lrc')
+        with gdaltest.error_handler():
+            cs = ds.GetRasterBand(1).Checksum()
+        expected_cs = 4819
+        assert cs == expected_cs
+        ds = None
+        gdal.Unlink('/vsimem/out.mrf')
+        gdal.Unlink('/vsimem/out.mrf.aux.xml')
+        gdal.Unlink('/vsimem/out.idx')
+        gdal.Unlink('/vsimem/out.lrc')
 
 def test_mrf_cached_source():
 

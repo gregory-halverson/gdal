@@ -96,7 +96,7 @@ void RegisterOGRElastic() {
     poDriver->SetDescription( "Elasticsearch" );
     poDriver->SetMetadataItem( GDAL_DCAP_VECTOR, "YES" );
     poDriver->SetMetadataItem( GDAL_DMD_LONGNAME, "Elastic Search" );
-    poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "drv_elasticsearch.html" );
+    poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "drivers/vector/elasticsearch.html" );
     poDriver->SetMetadataItem( GDAL_DMD_CONNECTION_PREFIX, "ES:" );
     poDriver->SetMetadataItem( GDAL_DMD_CREATIONOPTIONLIST,
                                "<CreationOptionList/>");
@@ -115,6 +115,10 @@ void RegisterOGRElastic() {
     "    <Value>AUTO</Value>"
     "    <Value>GEO_POINT</Value>"
     "    <Value>GEO_SHAPE</Value>"
+    "  </Option>"
+    "  <Option name='GEO_SHAPE_ENCODING' type='string-select' description='Encoding for geo_shape geometry fields' default='GeoJSON'>"
+    "    <Value>GeoJSON</Value>"
+    "    <Value>WKT</Value>"
     "  </Option>"
     "  <Option name='GEOM_PRECISION' type='string' description='Desired geometry precision. Number followed by unit. For example 1m'/>"
     "  <Option name='STORE_FIELDS' type='boolean' description='Whether fields should be stored in the index' default='NO'/>"

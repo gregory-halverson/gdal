@@ -3261,21 +3261,33 @@ static bool IsPolarToWGS84( OGRCoordinateTransformation* poCT,
         // Surprisingly, pole south projects correctly back &
         // forth for antarctic polar stereographic.  Therefore, check that
         // the projected value is not too big.
-        fabs(x) < 1e10 && fabs(y) < 1e10 &&
-        poCT->Transform(1, &x, &y) &&
-        fabs(y - 90.0) < 1e-10 )
+        fabs(x) < 1e10 && fabs(y) < 1e10 )
     {
-        bIsNorthPolar = true;
+        double x_tab[] = {x, x - 1e5, x + 1e5};
+        double y_tab[] = {y, y - 1e5, y + 1e5};
+        if( poCT->Transform(3, x_tab, y_tab) &&
+            fabs(y_tab[0] - (90.0)) < 1e-10 &&
+            fabs(x_tab[2] - x_tab[1]) > 170 &&
+            fabs(y_tab[2] - y_tab[1]) < 1e-10 )
+        {
+            bIsNorthPolar = true;
+        }
     }
 
     x = 0.0;
     y = -90.0;
     if( poRevCT->Transform( 1, &x, &y ) &&
-        fabs(x) < 1e10 && fabs(y) < 1e10 &&
-        poCT->Transform(1, &x, &y) &&
-        fabs(y - (-90.0)) < 1e-10 )
+        fabs(x) < 1e10 && fabs(y) < 1e10 )
     {
-        bIsSouthPolar = true;
+        double x_tab[] = {x, x - 1e5, x + 1e5};
+        double y_tab[] = {y, y - 1e5, y + 1e5};
+        if( poCT->Transform(3, x_tab, y_tab) &&
+            fabs(y_tab[0] - (-90.0)) < 1e-10 &&
+            fabs(x_tab[2] - x_tab[1]) > 170 &&
+            fabs(y_tab[2] - y_tab[1]) < 1e-10 )
+        {
+            bIsSouthPolar = true;
+        }
     }
 
     poCT->SetEmitErrors(bBackupEmitErrors);
@@ -3603,92 +3615,69 @@ static OGRGeometry* TransformBeforeAntimeridianToWGS84(
 
     const double EPS = 1e-9;
 
-    // Build a multipolygon (in projected space) with 2 parts: one part left
-    // of the antimeridian, one part east
-    const OGRwkbGeometryType eType = wkbFlatten(poDstGeom->getGeometryType());
-
-    // If we have lines, then to get better accuracy of the intersection with
-    // the main geometry, we need to add extra points
-    const bool bHasLines = (eType == wkbLineString ||
-                            eType == wkbMultiLineString);
-
-    OGRLinearRing* poLR1 = new OGRLinearRing();
-    poLR1->addPoint( sEnvelope.MinX, sEnvelope.MinY );
-    if( bHasLines )
+    // Build a very thin polygon cutting the antimeridian at our points
+    OGRLinearRing* poLR = new OGRLinearRing;
     {
-        double x = 180.0 - EPS;
+        double x = 180.0-EPS;
         double y = aoPoints[0].y-EPS;
         poRevCT->Transform(1, &x, &y);
-        poLR1->addPoint( x, y );
+        poLR->addPoint( x, y );
     }
     for( const auto& oPoint: aoPoints )
     {
-        double x = 180.0 - EPS;
+        double x = 180.0-EPS;
         double y = oPoint.y;
         poRevCT->Transform(1, &x, &y);
-        poLR1->addPoint( x, y );
+        poLR->addPoint( x, y );
     }
-    if( bHasLines )
     {
-        double x = 180.0 - EPS;
+        double x = 180.0-EPS;
         double y = aoPoints.back().y+EPS;
         poRevCT->Transform(1, &x, &y);
-        poLR1->addPoint( x, y );
+        poLR->addPoint( x, y );
     }
-    poLR1->addPoint( sEnvelope.MinX, sEnvelope.MaxY );
-    poLR1->addPoint( sEnvelope.MinX, sEnvelope.MinY );
-    OGRPolygon* poPoly1 = new OGRPolygon();
-    poPoly1->addRingDirectly( poLR1 );
-
-
-    OGRLinearRing* poLR2 = new OGRLinearRing();
-    poLR2->addPoint( sEnvelope.MaxX, sEnvelope.MinY );
-    if( bHasLines )
     {
-        double x = -180.0 + EPS;
+        double x = 180.0+EPS;
+        double y = aoPoints.back().y+EPS;
+        poRevCT->Transform(1, &x, &y);
+        poLR->addPoint( x, y );
+    }
+    for( size_t i = aoPoints.size(); i > 0; )
+    {
+        --i;
+        const OGRRawPoint& oPoint = aoPoints[i];
+        double x = 180.0+EPS;
+        double y = oPoint.y;
+        poRevCT->Transform(1, &x, &y);
+        poLR->addPoint( x, y );
+    }
+    {
+        double x = 180.0+EPS;
         double y = aoPoints[0].y-EPS;
         poRevCT->Transform(1, &x, &y);
-        poLR2->addPoint( x, y );
+        poLR->addPoint( x, y );
     }
-    for( const auto& oPoint: aoPoints )
-    {
-        double x = -180.0 + EPS;
-        double y = oPoint.y;
-        poRevCT->Transform(1, &x, &y);
-        poLR2->addPoint( x, y );
-    }
-    if( bHasLines )
-    {
-        double x = -180.0 + EPS;
-        double y = aoPoints.back().y+EPS;
-        poRevCT->Transform(1, &x, &y);
-        poLR2->addPoint( x, y );
-    }
-    poLR2->addPoint( sEnvelope.MaxX, sEnvelope.MaxY );
-    poLR2->addPoint( sEnvelope.MaxX, sEnvelope.MinY );
-    OGRPolygon* poPoly2 = new OGRPolygon();
-    poPoly2->addRingDirectly( poLR2 );
+    poLR->closeRings();
 
-    OGRMultiPolygon oMP;
-    oMP.addGeometryDirectly(poPoly1);
-    oMP.addGeometryDirectly(poPoly2);
+    OGRPolygon oPolyToCut;
+    oPolyToCut.addRingDirectly(poLR);
 
 #if DEBUG_VERBOSE
     char* pszWKT = NULL;
-    oMP.exportToWkt(&pszWKT);
-    CPLDebug("OGR", "MP without antimeridian: %s", pszWKT);
+    oPolyToCut.exportToWkt(&pszWKT);
+    CPLDebug("OGR", "Geometry to cut: %s", pszWKT);
     CPLFree(pszWKT);
 #endif
 
     // Get the geometry without the antimeridian
-    OGRGeometry* poInter = poDstGeom->Intersection(&oMP);
+    OGRGeometry* poInter = poDstGeom->Difference(&oPolyToCut);
     if( poInter != nullptr )
     {
         delete poDstGeom;
         poDstGeom = poInter;
+        bNeedPostCorrectionOut = true;
     }
 
-    bNeedPostCorrectionOut = true;
     return poDstGeom;
 }
 
